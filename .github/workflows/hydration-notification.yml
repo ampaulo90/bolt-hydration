@@ -1,0 +1,79 @@
+name: BOLT Hydration - Automatic Notifications
+
+on:
+  # Segunda a Quinta (Brasília UTC-3)
+  # 08:15 Brasília = 11:15 UTC
+  - cron: '15 11 * * 1-4'
+  # 09:45 Brasília = 12:45 UTC
+  - cron: '45 12 * * 1-4'
+  # 11:30 Brasília = 14:30 UTC
+  - cron: '30 14 * * 1-4'
+  # 13:45 Brasília = 16:45 UTC
+  - cron: '45 16 * * 1-4'
+  # 15:15 Brasília = 18:15 UTC
+  - cron: '15 18 * * 1-4'
+  # 16:45 Brasília = 19:45 UTC
+  - cron: '45 19 * * 1-4'
+
+  # Sexta (Brasília UTC-3)
+  # 08:15 Brasília = 11:15 UTC
+  - cron: '15 11 * * 5'
+  # 09:45 Brasília = 12:45 UTC
+  - cron: '45 12 * * 5'
+  # 11:30 Brasília = 14:30 UTC
+  - cron: '30 14 * * 5'
+  # 13:45 Brasília = 16:45 UTC
+  - cron: '45 16 * * 5'
+  # 15:15 Brasília = 18:15 UTC
+  - cron: '15 18 * * 5'
+
+  # Manual trigger for testing
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force send notification'
+        required: false
+        default: 'false'
+
+jobs:
+  send-notification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Send Hydration Reminder via Edge Function
+        env:
+          FUNCTION_URL: ${{ secrets.EDGE_FUNCTION_URL }}
+          ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+        run: |
+          echo "=============================================="
+          echo "💧 BOLT HYDRATION - $(TZ='America/Sao_Paulo' date '+%Y-%m-%d %H:%M:%S') Brasília"
+          echo "=============================================="
+
+          FORCE_FLAG=""
+          if [ "${{ github.event.inputs.force }}" = "true" ]; then
+            FORCE_FLAG=', "force": true'
+          fi
+
+          HTTP_CODE=$(curl -s -w "%{http_code}" -o response.txt -X POST \
+            "${FUNCTION_URL}" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${ANON_KEY}" \
+            -d "{\"webhook_url\": \"${WEBHOOK_URL}\"${FORCE_FLAG}}")
+
+          echo "HTTP Status: $HTTP_CODE"
+          echo "Response:"
+          cat response.txt
+
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo ""
+            echo "✅ Notification sent successfully!"
+          else
+            echo ""
+            echo "⚠️ Check response for details"
+          fi
+
+      - name: Cleanup
+        if: always()
+        run: rm -f response.txt
